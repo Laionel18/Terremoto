@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Terremoto 3D</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Library THREE.JS (Única dependencia CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <style>
+        :root {
+            --bg-glass: rgba(10, 14, 26, 0.85);
+            --border-glass: rgba(0, 240, 255, 0.25);
+            --primary-cyan: #00f0ff;
+            --alert-red: #ff2a5f;
+            --warning-orange: #ff9900;
+            --success-green: #00ff88;
+            --text-main: #e0f7fc;
+            --font-head: 'Orbitron', sans-serif;
+            --font-body: 'Rajdhani', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #030509;
+            font-family: var(--font-body);
+            color: var(--text-main);
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Capa UI Overlay */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: grid;
+            grid-template-columns: 360px 1fr 340px;
+            grid-template-rows: auto 1fr auto;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .interactive {
+            pointer-events: auto;
+        }
+
+        .panel {
+            background: var(--bg-glass);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.7),
+                        inset 0 0 15px rgba(0, 240, 255, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary-cyan), transparent);
+        }
+
+        /* Header UI */
+        .header-panel {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 25px;
+        }
+
+        h1 {
+            font-family: var(--font-head);
+            font-size: 1.4rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+            color: #ffffff;
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .live-badge {
+            font-family: var(--font-head);
+            font-size: 0.75rem;
+            padding: 5px 12px;
+            border-radius: 20px;
+            background: rgba(0, 255, 136, 0.15);
+            border: 1px solid var(--success-green);
+            color: var(--success-green);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--success-green);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(0, 255, 136, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 136, 0); }
+        }
+
+        /* Panel Izquierdo */
+        .controls-panel {
+            grid-column: 1;
+            grid-row: 2;
+        }
+
+        .section-title {
+            font-family: var(--font-head);
+            font-size: 0.85rem;
+            color: var(--primary-cyan);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Selector de Magnitud */
+        .magnitude-display-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 240, 255, 0.15);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .magnitude-number {
+            font-family: var(--font-head);
+            font-size: 4.2rem;
+            font-weight: 900;
+            line-height: 1;
+            color: var(--primary-cyan);
+            text-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
+            transition: color 0.3s, text-shadow 0.3s;
+        }
+
+        .magnitude-inputs {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        input[type=number] {
+            width: 70px;
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid var(--primary-cyan);
+            border-radius: 6px;
+            color: #fff;
+            font-family: var(--font-head);
+            font-size: 1.1rem;
+            padding: 5px;
+            text-align: center;
+        }
+
+        input[type=number]:focus {
+            outline: none;
+            box-shadow: 0 0 8px var(--primary-cyan);
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]:focus {
+            outline: none;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 10px;
+            cursor: pointer;
+            background: #0d1527;
+            border-radius: 5px;
+            border: 1px solid rgba(0, 240, 255, 0.3);
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            height: 22px;
+            width: 22px;
+            border-radius: 50%;
+            background: var(--primary-cyan);
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -6px;
+            box-shadow: 0 0 10px var(--primary-cyan);
+        }
+
+        /* Botones */
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: auto;
+        }
+
+        .btn {
+            font-family: var(--font-head);
+            font-size: 0.95rem;
+            font-weight: 700;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            letter-spacing: 1px;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #ff2a5f, #b3002d);
+            color: #ffffff;
+            box-shadow: 0 4px 15px rgba(255, 42, 95, 0.4);
+        }
+
+        .btn-start:hover {
+            background: linear-gradient(135deg, #ff4775, #d60036);
+            box-shadow: 0 6px 20px rgba(255, 42, 95, 0.6);
+            transform: translateY(-2px);
+        }
+
+        .btn-reset {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #e0f7fc;
+        }
+
+        .btn-reset:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: var(--primary-cyan);
+            color: var(--primary-cyan);
+        }
+
+        /* Panel Derecho */
+        .info-panel {
+            grid-column: 3;
+            grid-row: 2;
+        }
+
+        .info-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .info-card {
+            background: rgba(0, 0, 0, 0.4);
+            border-left: 3px solid var(--primary-cyan);
+            padding: 12px 15px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .info-card-label {
+            font-size: 0.75rem;
+            color: #7e91a0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .info-card-value {
+            font-family: var(--font-head);
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-top: 2px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            background: rgba(0, 240, 255, 0.1);
+            color: var(--primary-cyan);
+            border: 1px solid var(--primary-cyan);
+        }
+
+        .seismograph-box {
+            height: 100px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            border-radius: 6px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        canvas#seismoCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Footer */
+        .footer-panel {
+            grid-column: 1 / -1;
+            grid-row: 3;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #7a8b9e;
+            background: rgba(3, 5, 9, 0.9);
+            padding: 10px 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* Modos Responsive */
+        @media (max-width: 900px) {
+            #ui-layer {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto auto;
+                overflow-y: auto;
+                pointer-events: auto;
+            }
+            .controls-panel, .info-panel { grid-column: 1; }
+            .info-panel { grid-row: 3; }
+            .footer-panel { grid-row: 4; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Canvas 3D -->
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer">
+        
+        <!-- Header -->
+        <header class="panel header-panel interactive">
+            <h1>🌎 SIMULADOR DE TERREMOTO 3D</h1>
+            <div class="live-badge">
+                <div class="live-dot"></div>
+                <span>SISTEMA ACTIVO</span>
+            </div>
+        </header>
+
+        <!-- Panel de Control Izquierdo -->
+        <section class="panel controls-panel interactive">
+            <div class="section-title">Magnitud Sísmica (Richter)</div>
+            
+            <div class="magnitude-display-container">
+                <div class="magnitude-number" id="magDisplay">7.5</div>
+                
+                <div class="magnitude-inputs">
+                    <div class="slider-container">
+                        <input type="range" id="magSlider" min="1.0" max="10.0" step="0.1" value="7.5">
+                    </div>
+                    <input type="number" id="magInput" min="1.0" max="10.0" step="0.1" value="7.5">
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-start" id="btnStart">⚠️ INICIAR TERREMOTO</button>
+                <button class="btn btn-reset" id="btnReset">🔄 REINICIAR</button>
+            </div>
+        </section>
+
+        <!-- Panel de Datos Derecho -->
+        <section class="panel info-panel interactive">
+            <div class="section-title">Telemetría Sísmica</div>
+            
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-card-label">Magnitud Objetivo</div>
+                    <div class="info-card-value" id="infoMag">7.5 Mw</div>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-card-label">Intensidad Estimada</div>
+                    <div class="info-card-value" id="infoIntensity" style="color: var(--warning-orange);">EXTREMA</div>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-card-label">Estado de la Simulación</div>
+                    <div class="info-card-value">
+                        <span class="status-badge" id="infoState">SIN ACTIVIDAD</span>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-card-label">Tiempo Transcurrido</div>
+                    <div class="info-card-value" id="infoTime">00:00</div>
+                </div>
+            </div>
+
+            <div class="section-title" style="margin-top: 5px;">Sismógrafo en Vivo</div>
+            <div class="seismograph-box">
+                <canvas id="seismoCanvas"></canvas>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer-panel">
+            ⚠️ Simulación visual educativa. Los efectos mostrados son aproximados y no representan una predicción sísmica ni daños reales.
+        </footer>
+    </div>
+
+    <!-- CÓDIGO JS PRINCIPAL -->
+    <script>
+        // --- CONTROLADOR DE CÁMARA ORBITAL AUTÓNOMO (Sin dependencias externas) ---
+        class CustomOrbitControls {
+            constructor(camera, domElement) {
+                this.camera = camera;
+                this.domElement = domElement;
+                this.target = new THREE.Vector3(0, 0, 0);
+                
+                this.radius = 85;
+                this.theta = Math.PI / 4;
+                this.phi = Math.PI / 3;
+                
+                this.minRadius = 15;
+                this.maxRadius = 180;
+                this.minPhi = 0.1;
+                this.maxPhi = Math.PI / 2 - 0.02;
+
+                this.isDragging = false;
+                this.previousMousePosition = { x: 0, y: 0 };
+
+                this.initListeners();
+                this.updateCamera();
+            }
+
+            initListeners() {
+                const el = this.domElement;
+
+                const onPointerDown = (e) => {
+                    this.isDragging = true;
+                    this.previousMousePosition = { x: e.clientX, y: e.clientY };
+                };
+
+                const onPointerMove = (e) => {
+                    if (!this.isDragging) return;
+                    const deltaX = e.clientX - this.previousMousePosition.x;
+                    const deltaY = e.clientY - this.previousMousePosition.y;
+
+                    this.theta -= deltaX * 0.007;
+                    this.phi -= deltaY * 0.007;
+                    this.phi = Math.max(this.minPhi, Math.min(this.maxPhi, this.phi));
+
+                    this.previousMousePosition = { x: e.clientX, y: e.clientY };
+                    this.updateCamera();
+                };
+
+                const onPointerUp = () => { this.isDragging = false; };
+
+                const onWheel = (e) => {
+                    e.preventDefault();
+                    this.radius += e.deltaY * 0.05;
+                    this.radius = Math.max(this.minRadius, Math.min(this.maxRadius, this.radius));
+                    this.updateCamera();
+                };
+
+                el.addEventListener('pointerdown', onPointerDown);
+                window.addEventListener('pointermove', onPointerMove);
+                window.addEventListener('pointerup', onPointerUp);
+                el.addEventListener('wheel', onWheel, { passive: false });
+
+                // Soporte táctil móvil
+                let touchStartDist = 0;
+                el.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 1) {
+                        this.isDragging = true;
+                        this.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                    } else if (e.touches.length === 2) {
+                        this.isDragging = false;
+                        touchStartDist = Math.hypot(
+                            e.touches[0].clientX - e.touches[1].clientX,
+                            e.touches[0].clientY - e.touches[1].clientY
+                        );
+                    }
+                }, { passive: true });
+
+                el.addEventListener('touchmove', (e) => {
+                    if (this.isDragging && e.touches.length === 1) {
+                        const deltaX = e.touches[0].clientX - this.previousMousePosition.x;
+                        const deltaY = e.touches[0].clientY - this.previousMousePosition.y;
+                        this.theta -= deltaX * 0.007;
+                        this.phi -= deltaY * 0.007;
+                        this.phi = Math.max(this.minPhi, Math.min(this.maxPhi, this.phi));
+                        this.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                        this.updateCamera();
+                    } else if (e.touches.length === 2) {
+                        const dist = Math.hypot(
+                            e.touches[0].clientX - e.touches[1].clientX,
+                            e.touches[0].clientY - e.touches[1].clientY
+                        );
+                        const factor = touchStartDist / dist;
+                        this.radius *= (factor - 1) * 0.1 + 1;
+                        this.radius = Math.max(this.minRadius, Math.min(this.maxRadius, this.radius));
+                        touchStartDist = dist;
+                        this.updateCamera();
+                    }
+                }, { passive: true });
+
+                el.addEventListener('touchend', () => { this.isDragging = false; });
+            }
+
+            updateCamera() {
+                const x = this.target.x + this.radius * Math.sin(this.phi) * Math.sin(this.theta);
+                const y = this.target.y + this.radius * Math.cos(this.phi);
+                const z = this.target.z + this.radius * Math.sin(this.phi) * Math.cos(this.theta);
+                this.camera.position.set(x, y, z);
+                this.camera.lookAt(this.target);
+            }
+
+            reset() {
+                this.radius = 85;
+                this.theta = Math.PI / 4;
+                this.phi = Math.PI / 3;
+                this.target.set(0, 0, 0);
+                this.updateCamera();
+            }
+        }
+
+        // --- CONSTANTES Y VARIABLES GLOBALES ---
+        const DURATION = 20.0; // Duración exacta en segundos
+        let scene, camera, renderer, controls;
+        let buildings = [];
+        let streetFurniture = [];
+        let dustParticles, dustGeo;
+        let seismoCanvas, seismoCtx;
+
+        let isSimulating = false;
+        let simTime = 0;
+        let currentMagnitude = 7.5;
+        let clock = new THREE.Clock();
+
+        // Generar textura procedural de ventanas
+        function createBuildingTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#161d2b';
+            ctx.fillRect(0, 0, 128, 128);
+
+            for (let y = 8; y < 128; y += 16) {
+                for (let x = 8; x < 128; x += 16) {
+                    if (Math.random() > 0.35) {
+                        ctx.fillStyle = Math.random() > 0.15 ? '#ffe082' : '#00f0ff';
+                        ctx.fillRect(x, y, 6, 8);
+                    } else {
+                        ctx.fillStyle = '#0a0e17';
+                        ctx.fillRect(x, y, 6, 8);
+                    }
+                }
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        // --- INICIALIZACIÓN DE LA ESCENA ---
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+
+            // Escena
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x030509);
+            scene.fog = new THREE.FogExp2(0x030509, 0.008);
+
+            // Cámara
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Controles de Cámara Personalizados
+            controls = new CustomOrbitControls(camera, renderer.domElement);
+
+            // Iluminación
+            const ambientLight = new THREE.AmbientLight(0x2d3f5e, 1.2);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xfff3e0, 1.8);
+            dirLight.position.set(50, 80, 30);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 10;
+            dirLight.shadow.camera.far = 200;
+            const d = 70;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            const blueLight = new THREE.PointLight(0x00f0ff, 1.5, 80);
+            blueLight.position.set(0, 20, 0);
+            scene.add(blueLight);
+
+            // Construir Ciudad y Sistemas
+            buildCity();
+            buildDustSystem();
+            initSeismograph();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        // --- CONSTRUCCIÓN DE LA CIUDAD ---
+        function buildCity() {
+            const buildingTexture = createBuildingTexture();
+
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x0a0d14, roughness: 0.9 });
+            const roadMat = new THREE.MeshStandardMaterial({ color: 0x121722, roughness: 0.6 });
+
+            // Suelo Principal
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(250, 250), groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Grid de Carreteras
+            const mapSize = 80;
+            const blockSize = 16;
+            const roadWidth = 5;
+            const step = blockSize + roadWidth;
+
+            for (let x = -mapSize; x <= mapSize; x += step) {
+                const roadV = new THREE.Mesh(new THREE.PlaneGeometry(roadWidth, mapSize * 2), roadMat);
+                roadV.rotation.x = -Math.PI / 2;
+                roadV.position.set(x, 0.01, 0);
+                roadV.receiveShadow = true;
+                scene.add(roadV);
+
+                const roadH = new THREE.Mesh(new THREE.PlaneGeometry(mapSize * 2, roadWidth), roadMat);
+                roadH.rotation.x = -Math.PI / 2;
+                roadH.position.set(0, 0.01, x);
+                roadH.receiveShadow = true;
+                scene.add(roadH);
+            }
+
+            // Edificios
+            const baseMat = new THREE.MeshStandardMaterial({
+                color: 0x1a2333,
+                roughness: 0.4,
+                metalness: 0.2,
+                map: buildingTexture
+            });
+
+            for (let bx = -mapSize + step / 2; bx < mapSize; bx += step) {
+                for (let bz = -mapSize + step / 2; bz < mapSize; bz += step) {
+                    
+                    const count = Math.random() > 0.3 ? 2 : 1;
+                    const subSize = (blockSize - 2) / count;
+
+                    for (let sx = 0; sx < count; sx++) {
+                        for (let sz = 0; sz < count; sz++) {
+                            if (Math.random() > 0.12) {
+                                const posX = bx - blockSize / 2 + subSize / 2 + sx * subSize;
+                                const posZ = bz - blockSize / 2 + subSize / 2 + sz * subSize;
+
+                                const isTower = Math.random() > 0.7;
+                                const height = isTower ? 22 + Math.random() * 30 : 6 + Math.random() * 14;
+                                const width = subSize * 0.85;
+                                const depth = subSize * 0.85;
+
+                                const geo = new THREE.BoxGeometry(width, height, depth);
+                                
+                                const mat = baseMat.clone();
+                                mat.map = buildingTexture.clone();
+                                mat.map.repeat.set(1, Math.round(height / 4));
+                                mat.map.needsUpdate = true;
+
+                                const mesh = new THREE.Mesh(geo, mat);
+                                mesh.position.set(posX, height / 2, posZ);
+                                mesh.castShadow = true;
+                                mesh.receiveShadow = true;
+
+                                scene.add(mesh);
+
+                                buildings.push({
+                                    mesh: mesh,
+                                    initialPos: mesh.position.clone(),
+                                    initialRot: mesh.rotation.clone(),
+                                    height: height,
+                                    naturalFreq: 1.2 + (30 / height),
+                                    collapsed: false,
+                                    collapseProgress: 0,
+                                    fallDir: new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2).normalize()
+                                });
+
+                                // Estructura adicional en torres
+                                if (isTower) {
+                                    const roofGeo = new THREE.BoxGeometry(width * 0.5, 2, depth * 0.5);
+                                    const roofMesh = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x0d131d }));
+                                    roofMesh.position.set(0, height / 2 + 1, 0);
+                                    mesh.add(roofMesh);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Vehículos y Elementos Urbanos
+            createStreetFurniture();
+        }
+
+        function createStreetFurniture() {
+            const carGeo = new THREE.BoxGeometry(1.8, 1, 3.5);
+            const carColors = [0xff2a5f, 0x00f0ff, 0xffb700, 0xdddddd, 0x111111];
+
+            for (let i = 0; i < 30; i++) {
+                const color = carColors[Math.floor(Math.random() * carColors.length)];
+                const carMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.3 });
+                const car = new THREE.Mesh(carGeo, carMat);
+
+                const isVertical = Math.random() > 0.5;
+                const axisPos = (Math.floor(Math.random() * 6) - 3) * 21;
+                const randomOffset = (Math.random() - 0.5) * 120;
+
+                if (isVertical) {
+                    car.position.set(axisPos + 1.5, 0.5, randomOffset);
+                } else {
+                    car.position.set(randomOffset, 0.5, axisPos - 1.5);
+                    car.rotation.y = Math.PI / 2;
+                }
+
+                car.castShadow = true;
+                scene.add(car);
+
+                streetFurniture.push({
+                    mesh: car,
+                    initialPos: car.position.clone(),
+                    initialRot: car.rotation.clone()
+                });
+            }
+        }
+
+        // --- SISTEMA DE POLVO / PARTÍCULAS ---
+        function buildDustSystem() {
+            const particleCount = 1200;
+            dustGeo = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * 160;
+                positions[i * 3 + 1] = Math.random() * 25;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 160;
+            }
+
+            dustGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const dustMat = new THREE.PointsMaterial({
+                color: 0x7e91a0,
+                size: 1.0,
+                transparent: true,
+                opacity: 0,
+                depthWrite: false
+            });
+
+            dustParticles = new THREE.Points(dustGeo, dustMat);
+            scene.add(dustParticles);
+        }
+
+        // --- SISMÓGRAFO ---
+        function initSeismograph() {
+            seismoCanvas = document.getElementById('seismoCanvas');
+            seismoCtx = seismoCanvas.getContext('2d');
+            seismoCanvas.width = Math.max(100, seismoCanvas.offsetWidth);
+            seismoCanvas.height = Math.max(50, seismoCanvas.offsetHeight);
+        }
+
+        let seismoData = new Array(80).fill(0);
+
+        function updateSeismograph(amplitude) {
+            if (!seismoCtx) return;
+            
+            const w = seismoCanvas.width;
+            const h = seismoCanvas.height;
+            const centerY = h / 2;
+
+            seismoData.shift();
+            const val = (Math.random() - 0.5) * amplitude * (h * 0.85);
+            seismoData.push(val);
+
+            seismoCtx.clearRect(0, 0, w, h);
+            
+            // Fondo de cuadrícula
+            seismoCtx.strokeStyle = 'rgba(0, 240, 255, 0.08)';
+            seismoCtx.lineWidth = 1;
+            seismoCtx.beginPath();
+            for(let x=0; x<w; x+=20){ seismoCtx.moveTo(x,0); seismoCtx.lineTo(x,h); }
+            for(let y=0; y<h; y+=15){ seismoCtx.moveTo(0,y); seismoCtx.lineTo(w,y); }
+            seismoCtx.stroke();
+
+            // Onda Sísmica
+            seismoCtx.strokeStyle = isSimulating ? '#ff2a5f' : '#00f0ff';
+            seismoCtx.lineWidth = 2;
+            seismoCtx.beginPath();
+
+            const step = w / (seismoData.length - 1);
+            for (let i = 0; i < seismoData.length; i++) {
+                const x = i * step;
+                const y = centerY + seismoData[i];
+                if (i === 0) seismoCtx.moveTo(x, y);
+                else seismoCtx.lineTo(x, y);
+            }
+            seismoCtx.stroke();
+        }
+
+        // --- LÓGICA DE SIMULACIÓN Y TERREMOTO ---
+
+        function getEnvelope(t) {
+            if (t < 0 || t > DURATION) return 0;
+            if (t < 3.0) return t / 3.0;        // Ramp up (3s)
+            if (t < 14.0) return 1.0;       // Pico máximo (11s)
+            return (DURATION - t) / 6.0;   // Ramp down (6s)
+        }
+
+        function getIntensityCategory(mag) {
+            if (mag < 3.0) return { name: "IMPERCEPTIBLE", color: "#00ff88" };
+            if (mag < 4.0) return { name: "LEVE", color: "#73ff00" };
+            if (mag < 5.0) return { name: "MODERADA", color: "#ffea00" };
+            if (mag < 6.0) return { name: "FUERTE", color: "#ff9900" };
+            if (mag < 7.0) return { name: "MUY FUERTE", color: "#ff5500" };
+            if (mag < 8.0) return { name: "EXTREMA", color: "#ff2a5f" };
+            if (mag < 9.0) return { name: "DAÑOS IMPORTANTES", color: "#b3002d" };
+            return { name: "CATASTRÓFICA", color: "#7a00ff" };
+        }
+
+        function updateSimulationLogic(delta) {
+            if (!isSimulating) {
+                updateSeismograph(0);
+                return;
+            }
+
+            simTime += delta;
+            
+            if (simTime >= DURATION) {
+                simTime = DURATION;
+                endSimulation();
+            }
+
+            const envelope = getEnvelope(simTime);
+
+            // Cálculo dinámico de potencia sísmica
+            const basePower = Math.pow(2.1, currentMagnitude - 1) * 0.018;
+            const currentPower = basePower * envelope;
+
+            // Actualizar Sismógrafo
+            updateSeismograph(Math.min(currentPower * 0.25, 1.0));
+
+            // 1. Vibración de la Cámara
+            if (currentPower > 0.001) {
+                const shake = currentPower * 1.2;
+                camera.position.x += (Math.random() - 0.5) * shake;
+                camera.position.y += (Math.random() - 0.5) * shake;
+                camera.position.z += (Math.random() - 0.5) * shake;
+            }
+
+            // 2. Oscilación de Edificios
+            buildings.forEach(b => {
+                if (b.collapsed) return;
+
+                const freq = b.naturalFreq;
+                const swayX = Math.sin(simTime * freq * 6.0) * currentPower * (b.height * 0.06);
+                const swayZ = Math.cos(simTime * freq * 5.0) * currentPower * (b.height * 0.06);
+
+                b.mesh.rotation.z = b.initialRot.z + swayX * 0.03;
+                b.mesh.rotation.x = b.initialRot.x + swayZ * 0.03;
+                b.mesh.position.x = b.initialPos.x + swayX * 0.2;
+                b.mesh.position.z = b.initialPos.z + swayZ * 0.2;
+
+                // Inclinaciones permanentes para magnitudes altas (>= 7.5)
+                if (currentMagnitude >= 7.5 && envelope > 0.7 && Math.random() < 0.003) {
+                    b.initialRot.z += (Math.random() - 0.5) * 0.04;
+                    b.initialRot.x += (Math.random() - 0.5) * 0.04;
+                }
+
+                // Colapso de Edificios para magnitudes >= 8.0
+                if (currentMagnitude >= 8.0 && envelope > 0.4) {
+                    const collapseChance = (currentMagnitude - 7.5) * 0.0006 * (b.height / 8);
+                    if (Math.random() < collapseChance) {
+                        b.collapsed = true;
+                    }
+                }
+            });
+
+            // Animación de Colapso
+            buildings.forEach(b => {
+                if (b.collapsed && b.collapseProgress < 1.0) {
+                    b.collapseProgress += delta * 0.7;
+
+                    b.mesh.rotation.x += b.fallDir.z * delta * 1.5;
+                    b.mesh.rotation.z += b.fallDir.x * delta * 1.5;
+                    
+                    if (b.mesh.position.y > 1.5) {
+                        b.mesh.position.y -= delta * b.height * 0.4;
+                    }
+
+                    dustParticles.material.opacity = Math.min(dustParticles.material.opacity + 0.04, 0.75);
+                }
+            });
+
+            // 3. Desplazamiento de Vehículos
+            if (currentMagnitude >= 4.5) {
+                streetFurniture.forEach(item => {
+                    const shift = currentPower * 0.6;
+                    item.mesh.position.x += (Math.random() - 0.5) * shift;
+                    item.mesh.position.z += (Math.random() - 0.5) * shift;
+                    item.mesh.rotation.y += (Math.random() - 0.5) * shift * 0.3;
+                });
+            }
+
+            // 4. Polvo en Suspensión
+            const targetDustOpacity = Math.min(currentPower * 0.5, 0.6);
+            dustParticles.material.opacity = THREE.MathUtils.lerp(dustParticles.material.opacity, targetDustOpacity, 0.05);
+
+            // Actualizar reloj en UI (MM:SS)
+            const secs = Math.floor(simTime);
+            const mins = Math.floor(secs / 60);
+            document.getElementById('infoTime').innerText = 
+                `${String(mins).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+        }
+
+        // --- CONTROLADORES DE INTERFAZ Y EVENTOS ---
+
+        function startSimulation() {
+            if (isSimulating) return;
+
+            isSimulating = true;
+            simTime = 0;
+
+            document.getElementById('infoState').innerText = "TERREMOTO EN CURSO";
+            document.getElementById('infoState').style.color = "var(--alert-red)";
+            document.getElementById('infoState').style.borderColor = "var(--alert-red)";
+            document.getElementById('btnStart').disabled = true;
+            document.getElementById('btnStart').style.opacity = '0.5';
+        }
+
+        function endSimulation() {
+            isSimulating = false;
+
+            document.getElementById('infoState').innerText = "SIMULACIÓN FINALIZADA";
+            document.getElementById('infoState').style.color = "var(--success-green)";
+            document.getElementById('infoState').style.borderColor = "var(--success-green)";
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnStart').style.opacity = '1.0';
+        }
+
+        function resetSimulation() {
+            isSimulating = false;
+            simTime = 0;
+
+            // Restablecer UI
+            document.getElementById('infoState').innerText = "SIN ACTIVIDAD";
+            document.getElementById('infoState').style.color = "var(--primary-cyan)";
+            document.getElementById('infoState').style.borderColor = "var(--primary-cyan)";
+            document.getElementById('infoTime').innerText = "00:00";
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnStart').style.opacity = '1.0';
+
+            // Restablecer Cámara
+            controls.reset();
+
+            // Restablecer Edificios
+            buildings.forEach(b => {
+                b.collapsed = false;
+                b.collapseProgress = 0;
+                b.mesh.position.copy(b.initialPos);
+                b.mesh.rotation.copy(b.initialRot);
+            });
+
+            // Restablecer Vehículos
+            streetFurniture.forEach(item => {
+                item.mesh.position.copy(item.initialPos);
+                item.mesh.rotation.copy(item.initialRot);
+            });
+
+            // Restablecer Polvo
+            dustParticles.material.opacity = 0;
+
+            // Restablecer Sismógrafo
+            seismoData.fill(0);
+            updateSeismograph(0);
+        }
+
+        function updateMagnitudeUI(val) {
+            let num = parseFloat(val);
+            if (isNaN(num)) num = 1.0;
+            num = Math.max(1.0, Math.min(10.0, num));
+            
+            currentMagnitude = num;
+
+            document.getElementById('magSlider').value = num;
+            document.getElementById('magInput').value = num.toFixed(1);
+            document.getElementById('magDisplay').innerText = num.toFixed(1);
+            document.getElementById('infoMag').innerText = `${num.toFixed(1)} Mw`;
+
+            const cat = getIntensityCategory(num);
+            const intensityElem = document.getElementById('infoIntensity');
+            intensityElem.innerText = cat.name;
+            intensityElem.style.color = cat.color;
+
+            document.getElementById('magDisplay').style.color = cat.color;
+            document.getElementById('magDisplay').style.textShadow = `0 0 20px ${cat.color}88`;
+        }
+
+        // BINDING DE EVENTOS
+        const magSlider = document.getElementById('magSlider');
+        const magInput = document.getElementById('magInput');
+
+        magSlider.addEventListener('input', (e) => updateMagnitudeUI(e.target.value));
+        magInput.addEventListener('change', (e) => updateMagnitudeUI(e.target.value));
+
+        document.getElementById('btnStart').addEventListener('click', startSimulation);
+        document.getElementById('btnReset').addEventListener('click', resetSimulation);
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            if (seismoCanvas) {
+                seismoCanvas.width = Math.max(100, seismoCanvas.offsetWidth);
+                seismoCanvas.height = Math.max(50, seismoCanvas.offsetHeight);
+            }
+        }
+
+        // --- BUCLE DE RENDEREADO PRINCIPAL ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = Math.min(clock.getDelta(), 0.1);
+
+            // Lógica del terremoto
+            updateSimulationLogic(delta);
+
+            // Renderizar la escena 3D
+            renderer.render(scene, camera);
+        }
+
+        // Inicialización Garantizada
+        window.addEventListener('load', () => {
+            initScene();
+            updateMagnitudeUI(magSlider.value);
+            clock.start();
+            animate();
+        });
+    </script>
+</body>
+</html>
